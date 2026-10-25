@@ -32,9 +32,12 @@
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
     .dependencies = .{
+        // .zig_graphics_bindings = .{
+        //     .url = "git+https://github.com/njmdev03/zig-graphics-bindings.git#9e276120b32946c63bbf9c6e5026ac53c0ff2b4e",
+        //     .hash = "zig_graphics_bindings-0.0.0-YGTlnV6fAADaGlY8miw-QIvnlr67G6FZ9EFsm_fnEBUa",
+        // },
         .zig_graphics_bindings = .{
-            .url = "git+https://github.com/njmdev03/zig-graphics-bindings.git#9e276120b32946c63bbf9c6e5026ac53c0ff2b4e",
-            .hash = "zig_graphics_bindings-0.0.0-YGTlnV6fAADaGlY8miw-QIvnlr67G6FZ9EFsm_fnEBUa",
+            .path = "../zig-graphics-bindings",
         },
         .raylib_zig = .{
             .url = "git+https://github.com/raylib-zig/raylib-zig?ref=devel#28bbe30112f605da918db00eff53a75ce1aa9180",
@@ -44,7 +47,7 @@
             .url = "git+https://github.com/emscripten-core/emsdk?ref=4.0.9#3bcf1dcd01f040f370e10fe673a092d9ed79ebb5",
             .hash = "N-V-__8AAJl1DwBezhYo_VE6f53mPVm00R-Fk28NPW7P14EQ",
         },
-        .raylib = .{
+        .raylib_src = .{
             .url = "git+https://github.com/raysan5/raylib#48f352c96668369787b47e1bca9f3b78bf2650f1",
             .hash = "raylib-6.0.0-whq8uDh4OAWBdL51d8P_N1122HAU26tZWr6tlrV_lh20",
         },
