@@ -128,35 +128,44 @@ const Inputs = struct {
     initVelAngle: f32,
     velPolarUpdated: bool,
 
+    positionX:f32,
+    positionY:f32,
+    positionXUpdated: bool,
+    positionYUpdated: bool,
+
     gravity: f32,
-    gravityUpdated: bool,
 
     time: f32,
     timeUpdated: bool,
 
     worldScale: f32,
-    worldScaleUpdated: bool,
 
     tickSpacing: f32,
-    tickSpacingUpdated: bool,
 
     distanceUnit: DistanceUnit,
-    distanceUnitUpdated: bool,
-
     velocityUnit: VelocityUnit,
-    velocityUnitUpdated: bool,
-
     accelerationUnit: AccelerationUnit,
-    accelerationUnitUpdated: bool,
-
     timeUnit: TimeUnit,
-    timeUnitUpdated: bool,
 
     lineColor: rl.Color,
     markupColor: rl.Color,
     axisColor: rl.Color,
     backgroundColor: rl.Color,
+    debugColor: rl.Color,
+
+    // Debug settings
+    drawDebugPoints: bool,
 };
+
+fn clearInputUpdates(i: *Inputs) void {
+    // i.positionXUpdated = false;
+    // i.positionYUpdated = false;
+
+    i.velPolarUpdated = false;
+    i.velCartesianUpdated = false;
+
+    i.timeUpdated = false;
+}
 
 pub fn main() !void {
     // Initialization
@@ -189,9 +198,8 @@ pub fn main() !void {
     };
 
     var inputs: Inputs = .{
-        .initVelX = 10,
-        .initVelY = 10,
-
+        .initVelX = 0,
+        .initVelY = 0,
         .velCartesianUpdated = false,
 
         .initVelAngle = std.math.degreesToRadians(60.0),
@@ -199,34 +207,32 @@ pub fn main() !void {
         // Set the polar to updated in order to calculate the components
         .velPolarUpdated = true,
 
+        .positionX = 0,
+        .positionY = 0,
+        .positionXUpdated = false,
+        .positionYUpdated = false,
+
         .gravity = -9.81,
-        .gravityUpdated = false,
 
         .time = 0,
         .timeUpdated = false,
 
         .worldScale = 20,
-        .worldScaleUpdated = false,
 
         .tickSpacing = 1,
-        .tickSpacingUpdated = false,
 
         .distanceUnit = DistanceUnit.m,
-        .distanceUnitUpdated = false,
-
         .velocityUnit = VelocityUnit.mPerS,
-        .velocityUnitUpdated = false,
-
         .accelerationUnit = AccelerationUnit.mPerSS,
-        .accelerationUnitUpdated = false,
-
         .timeUnit = TimeUnit.s,
-        .timeUnitUpdated = false,
 
         .lineColor = .dark_blue,
         .markupColor = .dark_green,
         .axisColor = .black,
         .backgroundColor = .white,
+        .debugColor = .orange,
+
+        .drawDebugPoints = false,
     };
 
     // I hate myself
@@ -282,9 +288,7 @@ pub fn main() !void {
             inputs.initVelY = inputs.initVelMag * @sin(inputs.initVelAngle);
         }
 
-        inputs.velCartesianUpdated = false;
-        inputs.velPolarUpdated = false;
-        inputs.gravityUpdated = false;
+        clearInputUpdates(&inputs);
 
         const calcParams = calc.EquationParams {
             .iV = .{ .x = inputs.initVelX, .y = inputs.initVelY, },
@@ -327,6 +331,7 @@ pub fn main() !void {
                 target.y = -heightExtent / 2;
 
                 inputs.time = calc.timeOfFlight(&calcParams) / 2;
+                inputs.timeUpdated = true;
             }
 
             rl.drawLineEx(.{ .x = 0, .y = 0 }, .{ .x = 0, .y = -heightExtent }, 4.0, inputs.axisColor);
@@ -376,9 +381,40 @@ pub fn main() !void {
                 landingPoint
             }, 6, inputs.lineColor);
 
+            // Draw references for control points
+            rl.drawCircle(@trunc(launchPoint.x), @trunc(launchPoint.y), 8.0, inputs.debugColor);
+            rl.drawCircle(@trunc(controlPoint.x), @trunc(controlPoint.y), 8.0, inputs.debugColor);
+            rl.drawCircle(@trunc(landingPoint.x), @trunc(landingPoint.y), 8.0, inputs.debugColor);
+
+            if (inputs.timeUpdated) {
+                const pos = calc.displacementAtTime(&calcParams, inputs.time);
+                inputs.positionX = pos.x;
+                inputs.positionY = pos.y;
+            }
+
+            if (inputs.positionXUpdated) {
+                const calcTime = calc.trajectoryOfX(&calcParams, inputs.positionX);
+                inputs.time = calcTime;
+                inputs.positionY = calc.displacementAtTime(&calcParams, calcTime).y;
+
+                rl.drawCircle(@trunc(inputs.positionX), @trunc(inputs.positionY), 8.0, inputs.debugColor);
+            } else if (inputs.positionYUpdated) {
+                const calcTime = calc.trajectoryOfY(&calcParams, inputs.positionY)  catch @panic("Zero Gravity");
+                inputs.time = calcTime[0];
+
+                const x1 = calc.displacementAtTime(&calcParams, calcTime[0]).x;
+                const x2 = calc.displacementAtTime(&calcParams, calcTime[1]).x;
+
+                rl.drawCircle(@trunc(x1), @trunc(inputs.positionY), 8.0, inputs.debugColor);
+                rl.drawCircle(@trunc(x2), @trunc(inputs.positionY), 8.0, inputs.debugColor);
+
+                inputs.positionX = x1;
+            }
+
             const timeRefPoint = calc.displacementAtTime(&calcParams, inputs.time);
 
             rl.drawCircle(@trunc(timeRefPoint.x * inputs.worldScale), @trunc(-timeRefPoint.y * inputs.worldScale), 8.0, inputs.markupColor);
+
             //----------------------------------------------------------------------------------
         }
 
@@ -394,7 +430,6 @@ pub fn main() !void {
         }
 
         //----------------------------------------------------------------------------------
-
         first = false;
     }
 }
@@ -423,7 +458,7 @@ fn drawControls(inputs: *Inputs, params: *const calc.EquationParams) void {
             }
 
             cimgui.separatorText("World Config");
-            inputs.gravityUpdated = cimgui.dragFloat("Gravity", &inputs.gravity);
+            _ = cimgui.dragFloat("Gravity", &inputs.gravity);
         }
 
         if (cimgui.collapsingHeader("Results", 0)) {
@@ -433,6 +468,8 @@ fn drawControls(inputs: *Inputs, params: *const calc.EquationParams) void {
             cimgui.spacing();
 
             inputs.timeUpdated = cimgui.sliderFloat("Time", &inputs.time, 0.0, calc.timeOfFlight(params));
+            inputs.positionXUpdated = cimgui.sliderFloat("X Position", &inputs.positionX, 0.0, calc.range(params));
+            inputs.positionYUpdated = cimgui.sliderFloat("Y Position", &inputs.positionY, 0.0, calc.maxHeight(params));
             cimgui.spacing();
 
             // const velStr = std.fmt.allocPrintSentinel(alloc, "Velocity @ {d}", .{inputs.time}, 0)
@@ -477,10 +514,10 @@ fn drawControls(inputs: *Inputs, params: *const calc.EquationParams) void {
         }
 
         if (cimgui.collapsingHeader("Settings", 0)) {
-            inputs.worldScaleUpdated = cimgui.dragFloat("World Scale", &inputs.worldScale);
+            _ = cimgui.dragFloat("World Scale", &inputs.worldScale);
 
             if (cimgui.collapsingHeader("Styling", 0)) {
-                inputs.tickSpacingUpdated = cimgui.dragFloat("Tick Spacing", &inputs.tickSpacing);
+                _ = cimgui.dragFloat("Tick Spacing", &inputs.tickSpacing);
 
                 _ = colorPicker("Background", &inputs.backgroundColor, @enumFromInt(0));
                 _ = colorPicker("Trajectory", &inputs.lineColor, @enumFromInt(0));
@@ -491,7 +528,14 @@ fn drawControls(inputs: *Inputs, params: *const calc.EquationParams) void {
 
         if (builtin.mode == .debug) {
             if (cimgui.collapsingHeader("Debug", 0)) {
-                _ = cimgui.collapsingHeader("Units", 0);
+                // _ = cimgui.collapsingHeader("Units", 0);
+
+                cimgui.labelText("Control Point X", "%f", @as(f32, calc.controlPoint(params).x));
+                cimgui.labelText("Control Point Y", "%f", @as(f32, calc.controlPoint(params).y));
+                cimgui.labelText("Landing Point X", "%f", @as(f32, calc.range(params)));
+                cimgui.labelText("Landing Point Y", "%f", @as(f32, 0));
+
+
             }
         }
     }
