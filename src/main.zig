@@ -173,7 +173,7 @@ pub fn main() !void {
     const screenWidth = 1600;
     const screenHeight = 900;
 
-    rl.setConfigFlags(.{ .window_resizable = true, .window_highdpi = true });
+    rl.setConfigFlags(.{ .window_resizable = false, .window_highdpi = true });
 
     rl.initWindow(screenWidth, screenHeight, "parabolic trajectory calculator");
     defer rl.closeWindow(); // Close window and OpenGL context
@@ -288,8 +288,6 @@ pub fn main() !void {
             inputs.initVelY = inputs.initVelMag * @sin(inputs.initVelAngle);
         }
 
-        clearInputUpdates(&inputs);
-
         const calcParams = calc.EquationParams {
             .iV = .{ .x = inputs.initVelX, .y = inputs.initVelY, },
             .gravity = inputs.gravity,
@@ -393,23 +391,25 @@ pub fn main() !void {
             }
 
             if (inputs.positionXUpdated) {
-                const calcTime = calc.trajectoryOfX(&calcParams, inputs.positionX);
+                const calcTime = calc.timeAtX(&calcParams, inputs.positionX);
                 inputs.time = calcTime;
-                inputs.positionY = calc.displacementAtTime(&calcParams, calcTime).y;
+
+                inputs.positionY = calc.trajectoryOfX(&calcParams, inputs.positionX);
 
                 rl.drawCircle(@trunc(inputs.positionX), @trunc(inputs.positionY), 8.0, inputs.debugColor);
             } else if (inputs.positionYUpdated) {
-                const calcTime = calc.trajectoryOfY(&calcParams, inputs.positionY)  catch @panic("Zero Gravity");
-                inputs.time = calcTime[0];
+                const calcTime = calc.timeAtX(&calcParams, inputs.positionX);
+                inputs.time = calcTime;
 
-                const x1 = calc.displacementAtTime(&calcParams, calcTime[0]).x;
-                const x2 = calc.displacementAtTime(&calcParams, calcTime[1]).x;
+                const reverse = calc.trajectoryOfY(&calcParams, inputs.positionY) catch @panic("Zero Gravity");
+                inputs.positionX = reverse[0];
 
-                rl.drawCircle(@trunc(x1), @trunc(inputs.positionY), 8.0, inputs.debugColor);
-                rl.drawCircle(@trunc(x2), @trunc(inputs.positionY), 8.0, inputs.debugColor);
-
-                inputs.positionX = x1;
+                rl.drawCircle(@trunc(reverse[0]), @trunc(inputs.positionY), 8.0, inputs.debugColor);
+                rl.drawCircle(@trunc(reverse[1]), @trunc(inputs.positionY), 8.0, inputs.debugColor);
             }
+
+            inputs.positionXUpdated = false;
+            inputs.positionYUpdated = false;
 
             const timeRefPoint = calc.displacementAtTime(&calcParams, inputs.time);
 
@@ -424,6 +424,8 @@ pub fn main() !void {
             // rl.drawText("This text is in front of the world", 0, 120, 20, .dark_purple);
             rl_imgui.begin();
             defer rl_imgui.end();
+
+            clearInputUpdates(&inputs);
 
             drawControls(&inputs, &calcParams);
             //----------------------------------------------------------------------------------
@@ -465,12 +467,10 @@ fn drawControls(inputs: *Inputs, params: *const calc.EquationParams) void {
             cimgui.labelText("Time of flight", "%f", calc.timeOfFlight(params));
             cimgui.labelText("Range", "%f", calc.range(params));
             cimgui.labelText("Max height", "%f", calc.maxHeight(params));
-            cimgui.spacing();
 
             inputs.timeUpdated = cimgui.sliderFloat("Time", &inputs.time, 0.0, calc.timeOfFlight(params));
             inputs.positionXUpdated = cimgui.sliderFloat("X Position", &inputs.positionX, 0.0, calc.range(params));
             inputs.positionYUpdated = cimgui.sliderFloat("Y Position", &inputs.positionY, 0.0, calc.maxHeight(params));
-            cimgui.spacing();
 
             // const velStr = std.fmt.allocPrintSentinel(alloc, "Velocity @ {d}", .{inputs.time}, 0)
             //     catch @panic("OOM");
@@ -498,9 +498,9 @@ fn drawControls(inputs: *Inputs, params: *const calc.EquationParams) void {
 
             // cimgui.separatorText(dissStr);
 
-            var dissBuf: [64:0]u8 = undefined;
+            var displacementBuffer: [64:0]u8 = undefined;
             const dissStr = std.fmt.bufPrintSentinel(
-                &dissBuf,
+                &displacementBuffer,
                 "Displacement @ {d}",
                 .{inputs.time},
                 0,
@@ -508,9 +508,9 @@ fn drawControls(inputs: *Inputs, params: *const calc.EquationParams) void {
 
             cimgui.separatorText(dissStr);
 
-            const dissplacement = calc.displacementAtTime(params, inputs.time);
-            cimgui.labelText("X", "%f", dissplacement.x);
-            cimgui.labelText("Y", "%f", dissplacement.y);
+            const displacement = calc.displacementAtTime(params, inputs.time);
+            cimgui.labelText("X", "%f", displacement.x);
+            cimgui.labelText("Y", "%f", displacement.y);
         }
 
         if (cimgui.collapsingHeader("Settings", 0)) {

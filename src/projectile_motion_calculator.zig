@@ -35,6 +35,10 @@ pub fn trajectoryBValue(p: *const EquationParams) f32 {
     return p.iV.y / p.iV.x;
 }
 
+pub fn timeAtX(p: *const EquationParams, x: f32) f32 {
+    return p.iV.x / x;
+}
+
 pub fn trajectoryOfX(p: *const EquationParams, x: f32) f32 {
     return x * (p.iV.y / p.iV.x) + (p.gravity * x * x) / (2 * p.iV.x * p.iV.x);
 }
