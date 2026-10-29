@@ -23,7 +23,7 @@ pub fn build(b: *std.Build) !void {
     const cimgui_artifact = graphics_dep.artifact("cimgui");
 
     const calc_mod = b.createModule(.{
-        .root_source_file = b.path("src/projectile_motion_calculator.zig"),
+        .root_source_file = b.path("src/projectile_calc.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -40,6 +40,24 @@ pub fn build(b: *std.Build) !void {
 
     const run_step = b.step("run", "Run the app");
 
+    // Testing
+    // Creates an executable that will run `test` blocks from the provided module.
+    // Here `mod` needs to define a target, which is why earlier we made sure to
+    // set the relative field.
+    const calc_tests = b.addTest(.{
+        .root_module = calc_mod,
+    });
+
+    // A run step that will run the test executable.
+    const run_calc_tests = b.addRunArtifact(calc_tests);
+
+    // A top level step for running all tests. dependOn can be called multiple
+    // times and since the two run steps do not depend on one another, this will
+    // make the two of them run in parallel.
+    const test_step = b.step("test", "Run tests");
+    test_step.dependOn(&run_calc_tests.step);
+
+    // Executable builds
     //web exports are completely separate
     if (target.query.os_tag == .emscripten) {
         const emsdk = rlz.emsdk;
@@ -49,8 +67,7 @@ pub fn build(b: *std.Build) !void {
         });
 
         const install_dir: std.Build.InstallDir = .{ .custom = "web" };
-        // const html_filename = b.fmt("{s}.html", .{wasm.name});
-        const js_filename = b.fmt("{s}.js", .{wasm.name});
+        const filename = b.fmt("{s}.js", .{wasm.name});
         const emcc_flags = emsdk.emccDefaultFlags(b.allocator, .{
             .optimize = optimize,
         });
@@ -69,7 +86,7 @@ pub fn build(b: *std.Build) !void {
             // .shell_file_path = raylib_dep.builder.dependency("raylib", .{}).path("src/shell.html"),
             .install_dir = install_dir,
             // .preload_paths = &.{.{ .src_path = b.path("resources"), .virtual_path = "resources" }},
-            .out_file_name = js_filename,
+            .out_file_name = filename,
         });
         // emcc.py can not be spawned directly on Windows, use emcc.bat instead
         if (builtin.os.tag == .windows) {
@@ -82,7 +99,7 @@ pub fn build(b: *std.Build) !void {
 
         // const emrun_step = try emsdk.emrunStep(
         //     b,
-        //     b.graph.path(.install_prefix, b.fmt("web/{s}", .{js_filename})),
+        //     b.graph.path(.install_prefix, b.fmt("web/{s}", .{filename})),
         //     &.{},
         // );
 
@@ -102,6 +119,20 @@ pub fn build(b: *std.Build) !void {
         const run_cmd = b.addRunArtifact(exe);
         run_cmd.step.dependOn(b.getInstallStep());
 
+        run_cmd.addPassthruArgs();
+
         run_step.dependOn(&run_cmd.step);
+
+        // Executable Testing
+        // Creates an executable that will run `test` blocks from the executable's
+        // root module. Note that test executables only test one module at a time,
+        // hence why we have to create two separate ones.
+        const exe_tests = b.addTest(.{
+            .root_module = exe.root_module,
+        });
+
+        // A run step that will run the second test executable.
+        const run_exe_tests = b.addRunArtifact(exe_tests);
+        test_step.dependOn(&run_exe_tests.step);
     }
 }
